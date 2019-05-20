@@ -124,32 +124,32 @@ Fixpoint stack_of_context (E : context) : stack :=
   end.
 
 Lemma step_simulates_weak :
-  forall M N, M -w-> N -> exists P π, M ⊣ [] -k->* P ⊣ π.
+  forall M N, M -w-> N -> exists π, M ⊣ [] -k->* N ⊣ π.
 Proof.
   intros. induction H.
-  + exists M, []. apply multistep_step with (M2 := M!) (π2 := [Der]).
+  + exists []. apply multistep_step with (M2 := M!) (π2 := [Der]).
     ** apply SDer.
     ** apply multistep_step with (M2 := M) (π2 := []).
         -- apply RDerBang.
         -- apply multistep_refl.
-  + exists (S n), []. apply multistep_step with (M2 := n) (π2 := [Succ]).
+  + exists []. apply multistep_step with (M2 := n) (π2 := [Succ]).
     ** apply SSucc.
     ** apply multistep_step with (M2 := S n) (π2 := []).
         -- apply RSucc.
         -- apply multistep_refl.
-  + exists (M[V/x]), []. apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
+  + exists []. apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
     ** apply SArg.
     ** apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
         -- apply SFun. assumption.
         -- apply multistep_step with (M2 := M[V/x]) (π2 := []).
           ++ apply RBeta. assumption.
           ++ apply multistep_refl.
-  + exists N, []. admit.
-  + exists (P[n/z]), []. admit.
-  + destruct IHweak as (P & π & IHweak). set (πE := stack_of_context E).
+  + exists []. admit.
+  + exists []. admit.
+  + destruct IHweak as (π & IHweak). set (πE := stack_of_context E).
     induction E; simpl in *.
-    ** exists P, π. assumption.
-    ** exists (πE ++ π). apply RCtx with (E := E) in H.  inversion H.
+    ** exists π. assumption.
+    ** exists (E[M]), [Der]. apply RCtx with (E := E) in H.  inversion H.
         -- apply multistep_step with (M2 := (der E[N])!) (π2 := [Der]).
           ++ apply SDer.
           ++ apply multistep_step with (M2 := der E[N]) (π2 := []).
