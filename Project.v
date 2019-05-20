@@ -113,32 +113,43 @@ Proof.
     - assumption.
 Admitted.
 
+Fixpoint stack_of_context (E : context) : stack :=
+  match E with
+  | CHole => []
+  | CDer E => Der :: stack_of_context E
+  | CSucc E => Succ :: stack_of_context E
+  | CArg E V => Arg V :: stack_of_context E
+  | CFun M E => Arg M :: stack_of_context E
+  | CIf E N z P => If N z P :: stack_of_context E
+  end.
+
 Lemma step_simulates_weak :
-  forall M N, M -w-> N -> M ⊣ [] -k->* N ⊣ [].
+  forall M N, M -w-> N -> exists P π, M ⊣ [] -k->* P ⊣ π.
 Proof.
   intros. induction H.
-  + apply multistep_step with (M2 := M!) (π2 := [Der]).
+  + exists M, []. apply multistep_step with (M2 := M!) (π2 := [Der]).
     ** apply SDer.
     ** apply multistep_step with (M2 := M) (π2 := []).
         -- apply RDerBang.
         -- apply multistep_refl.
-  + apply multistep_step with (M2 := n) (π2 := [Succ]).
+  + exists (S n), []. apply multistep_step with (M2 := n) (π2 := [Succ]).
     ** apply SSucc.
     ** apply multistep_step with (M2 := S n) (π2 := []).
         -- apply RSucc.
         -- apply multistep_refl.
-  + apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
+  + exists (M[V/x]), []. apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
     ** apply SArg.
     ** apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
         -- apply SFun. assumption.
         -- apply multistep_step with (M2 := M[V/x]) (π2 := []).
           ++ apply RBeta. assumption.
           ++ apply multistep_refl.
-  + admit.
-  + admit.
-  + apply RCtx with (E := E) in H. induction E; simpl in *.
-    ** apply IHweak; assumption.
-    ** inversion H.
+  + exists N, []. admit.
+  + exists (P[n/z]), []. admit.
+  + destruct IHweak as (P & π & IHweak). set (πE := stack_of_context E).
+    induction E; simpl in *.
+    ** exists P, π. assumption.
+    ** exists (πE ++ π). apply RCtx with (E := E) in H.  inversion H.
         -- apply multistep_step with (M2 := (der E[N])!) (π2 := [Der]).
           ++ apply SDer.
           ++ apply multistep_step with (M2 := der E[N]) (π2 := []).
@@ -195,11 +206,8 @@ Fixpoint context_of_stack (π : stack) : context :=
     match m with
     | Der => CDer E
     | Succ => CSucc E
-    | Arg V H => CArg E V H
+    | Arg V => CArg E V
     | Fun M => CFun M E
     | If N z P => CIf E N z P
     end
   end.
-
-Definition normal_form_step M π :=
-  ~ exists M' π', M ⊣ π -k-> M' ⊣ π'.

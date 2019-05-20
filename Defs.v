@@ -1,6 +1,6 @@
 Require Export String List.
 Export ListNotations.
-Open Scope string_scope.
+Local Open Scope string_scope.
 
 Definition relation (X : Type) := X -> X -> Prop.
 
@@ -179,7 +179,7 @@ Inductive context :=
 | CHole
 | CDer (E : context)
 | CSucc (E : context)
-| CArg (E : context) (V : term) (prf : value V)
+| CArg (E : context) (V : term)
 | CFun (M : term) (E : context)
 | CIf (E : context) (N : term) (z : var) (P : term).
 
@@ -190,7 +190,7 @@ Fixpoint fill_context E M :=
   | CHole => M
   | CDer E => der E[M]
   | CSucc E => succ E[M]
-  | CArg E V _ => <E[M]>V
+  | CArg E V => <E[M]>V
   | CFun N E => <N>E[M]
   | CIf E N z P => #if (E[M], N, [z] P)
   end
