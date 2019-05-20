@@ -179,7 +179,7 @@ Inductive context :=
 | CHole
 | CDer (E : context)
 | CSucc (E : context)
-| CArg (E : context) (V : term) (prf : value V)
+| CArg (E : context) (V : term) (H : value V)
 | CFun (M : term) (E : context)
 | CIf (E : context) (N : term) (z : var) (P : term).
 
@@ -198,27 +198,32 @@ where "E [ M ]" := (fill_context E M) : smallstep_scope.
 
 Open Scope smallstep_scope.
 
+Reserved Notation "M --> N" (at level 60).
 Reserved Notation "M -w-> N" (at level 60).
+
+Inductive weak_comp : term -> term -> Prop :=
+
+| RDerBang M :
+  der M! --> M
+
+| RSucc (n : nat) :
+  succ n --> S n
+
+| RBeta x φ M V : value V ->
+  <(λ x:φ, M)> V --> M[V/x]
+
+| RIf_0 N z P : 
+  #if (0, N, [z] P) --> N
+
+| RIf_succ n N z P :
+  #if (S n, N, [z] P) --> P[n/z]
+
+where "M --> N" := (weak_comp M N) : smallstep_scope.
 
 Inductive weak : term -> term -> Prop :=
 
-| RDerBang M :
-  der M! -w-> M
-
-| RSucc (n : nat) :
-  succ n -w-> S n
-
-| RBeta x φ M V : value V ->
-  <(λ x:φ, M)> V -w-> M[V/x]
-
-| RIf_0 N z P : 
-  #if (0, N, [z] P) -w-> N
-
-| RIf_succ n N z P :
-  #if (S n, N, [z] P) -w-> P[n/z]
-
 | RCtx E M N :
-  M -w-> N ->
+  M --> N ->
   E[M] -w-> E[N]
 
 where "M -w-> N" := (weak M N) : smallstep_scope.
@@ -229,8 +234,7 @@ Remark value_normal_form V :
   value V -> normal_form weak V.
 Proof.
   intros. unfold normal_form. intro. destruct H0 as (M & ?).
-  induction H0; try inversion H;
-  apply IHweak; induction E; try discriminate; simpl in *; assumption.
+  destruct H0. destruct H0; induction E; inversion H.
 Qed.
 
 End Smallstep.

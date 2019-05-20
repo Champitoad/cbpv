@@ -1,4 +1,5 @@
-Require Import Defs Recdef Arith Lia.
+Require Import Defs.
+Open Scope list_scope.
 
 Axiom TODO : forall A, A.
 
@@ -97,69 +98,102 @@ Axiom weak_terminates :
   exists W, M -w->* W /\ value_or_abs W.
 
 Remark step_stack_closure π :
-  forall M W, value_or_abs W ->
-  (M ⊣ [] -k->* W ⊣ []) -> (M ⊣ π -k->* W ⊣ π).
+  forall M1 π1 M2 π2,
+  (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M1 ⊣ π1 ++ π -k->* M2 ⊣ π2 ++ π).
 Proof.
 Admitted.
 
-Lemma step_context_closure E :
-  forall M N,
-  (M ⊣ [] -k->* N ⊣ []) -> (E[M] ⊣ [] -k->* E[N] ⊣ []).
+Fixpoint stack_of_context E :=
+  match E with
+  | CHole => []
+  | CDer E => stack_of_context E ++ [Der]
+  | CSucc E => stack_of_context E ++ [Succ]
+  | CArg E V _ => stack_of_context E ++ [Arg V]
+  | CFun M E => stack_of_context E ++ [Fun M]
+  | CIf E N z P => stack_of_context E ++ [If N z P]
+  end.
+
+Lemma step_simulates_weak_comp :
+  forall M N, M --> N -> M ⊣ [] -k->* N ⊣ [].
 Proof.
   intros. induction H.
-  * apply multistep_refl.
-  * apply multistep_trans with (M2 := E[M2]) (π2 := π3).
-    - admit.
-    - assumption.
-Admitted.
+  * apply multistep_step with (M2 := M!) (π2 := [Der]).
+    - apply SDer.
+    - apply multistep_step with (M2 := M) (π2 := []).
+      + apply RDerBang.
+      + apply multistep_refl.
+  * apply multistep_step with (M2 := n) (π2 := [Succ]).
+    - apply SSucc.
+    - apply multistep_step with (M2 := S n) (π2 := []).
+      + apply RSucc.
+      + apply multistep_refl.
+  * apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
+    - apply SArg.
+    - apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
+      + apply SFun. assumption.
+      + apply multistep_step with (M2 := M[V/x]) (π2 := []).
+        ** apply RBeta. assumption.
+        ** apply multistep_refl.
+  * apply multistep_step with (M2 := 0) (π2 := [If N z P]).
+    - apply SIf.
+    - apply multistep_step with (M2 := N) (π2 := []).
+      + apply RIf_0.
+      + apply multistep_refl.
+  * apply multistep_step with (M2 := S n) (π2 := [If N z P]).
+    - apply SIf.
+    - apply multistep_step with (M2 := P[n/z]) (π2 := []).
+      + apply RIf_succ.
+      + apply multistep_refl.
+Qed.
 
-Lemma step_simulates_weak :
-  forall M N, M -w-> N -> M ⊣ [] -k->* N ⊣ [].
+Lemma step_simulates_weak_ctx E :
+  let π := stack_of_context E in
+  forall M N, M --> N -> E[M] ⊣ [] -k->* N ⊣ π.
 Proof.
-  intros. induction H.
-  + apply multistep_step with (M2 := M!) (π2 := [Der]).
-    ** apply SDer.
-    ** apply multistep_step with (M2 := M) (π2 := []).
-        -- apply RDerBang.
-        -- apply multistep_refl.
-  + apply multistep_step with (M2 := n) (π2 := [Succ]).
-    ** apply SSucc.
-    ** apply multistep_step with (M2 := S n) (π2 := []).
-        -- apply RSucc.
-        -- apply multistep_refl.
-  + apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
-    ** apply SArg.
-    ** apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
-        -- apply SFun. assumption.
-        -- apply multistep_step with (M2 := M[V/x]) (π2 := []).
-          ++ apply RBeta. assumption.
-          ++ apply multistep_refl.
-  + admit.
-  + admit.
-  + apply RCtx with (E := E) in H. induction E; simpl in *.
-    ** apply IHweak; assumption.
-    ** inversion H.
-        -- apply multistep_step with (M2 := (der E[N])!) (π2 := [Der]).
-          ++ apply SDer.
-          ++ apply multistep_step with (M2 := der E[N]) (π2 := []).
-              *** apply RDerBang.
-              *** apply multistep_refl.
-        -- admit.
-    ** admit.
-    ** admit.
-    ** admit.
-    ** admit.
-Admitted.
+  intros. induction E; simpl in *.
+  * apply step_simulates_weak_comp. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [Der]).
+    - apply SDer.
+    - rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [Succ]).
+    - apply SSucc.
+    - rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := V) (π2 := [Fun E[M]]).
+    - apply SArg.
+    - apply multistep_step with (M2 := E[M]) (π2 := [Arg V]).
+      + apply SFun. assumption.
+      + rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [Fun M0]).
+      + apply SArg.
+      + rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [If N0 z P]).
+      + apply SIf.
+      + rewrite <- app_nil_l with (l := [If N0 z P]). apply step_stack_closure. assumption.
+Qed.
 
-Lemma step_simulates_weak_bigstep :
-  forall M W, value_or_abs W ->
-  M -w->* W -> M ⊣ [] -k->* W ⊣ [].
+Lemma step_context_to_stack E :
+  let π := stack_of_context E in
+  forall M, E[M] ⊣ [] -k->* M ⊣ π.
 Proof.
-  intros. induction H0 as [ M | M P W ].
+  intros. induction E; simpl in *.
   * apply multistep_refl.
-  * apply multistep_trans with (M2 := P) (π2 := []).
-    - apply step_simulates_weak. assumption.
-    - apply IHmulti. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [Der]).
+    - apply SDer.
+    - rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [Succ]).
+    - apply SSucc.
+    - rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := V) (π2 := [Fun E[M]]).
+    - apply SArg.
+    - apply multistep_step with (M2 := E[M]) (π2 := [Arg V]).
+      + apply SFun. assumption.
+      + rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [Fun M0]).
+      + apply SArg.
+      + rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
+  * apply multistep_step with (M2 := E[M]) (π2 := [If N z P]).
+      + apply SIf.
+      + rewrite <- app_nil_l with (l := [If N z P]). apply step_stack_closure. assumption.
 Qed.
 
 Definition normal_form_step M π :=
@@ -174,6 +208,33 @@ Proof.
   * inversion H0.
 Qed.
 
+Lemma multistep_deterministic : TODO _.
+Proof.
+Admitted.
+
+Lemma one_way_to_normal_form :
+  forall M1 π1 M2 π2 M3 π3,
+  (M1 ⊣ π1 -k->* M3 ⊣ π3) -> (normal_form_step M3 π3) ->
+  (M1 ⊣ π1 -k->* M2 ⊣ π2) ->
+  (M2 ⊣ π2 -k->* M3 ⊣ π3).
+Proof.
+  (* The proof will use multistep_deterministic *)
+Admitted.
+
+Lemma step_simulates_weak_bigstep :
+  forall M W, value_or_abs W ->
+  M -w->* W -> M ⊣ [] -k->* W ⊣ [].
+Proof.
+  intros. induction H0 as [ M | M N W ].
+  * apply multistep_refl.
+  * destruct H0.
+    pose proof (step_simulates_weak_ctx E M N H0).
+    pose proof (step_context_to_stack E N).
+    pose proof (value_or_abs_normal_form_step W H). apply IHmulti in H.
+    pose proof (one_way_to_normal_form E[N] ([]) N (stack_of_context E) W ([]) H H4 H3).
+    apply multistep_trans with (M2 := N) (π2 := stack_of_context E); assumption.
+Qed.
+
 Theorem step_terminates :
   forall M, well_typed M ->
   exists W, (M ⊣ [] -k->* W ⊣ []) /\ normal_form_step W ([]).
@@ -184,22 +245,3 @@ Proof.
   * assumption.
   * apply value_or_abs_normal_form_step. assumption.
 Qed.
-
-(* Things that might be useful at some point *)
-
-Fixpoint context_of_stack (π : stack) : context :=
-  match π with
-  | [] => CHole
-  | m :: π =>
-    let E := context_of_stack π in
-    match m with
-    | Der => CDer E
-    | Succ => CSucc E
-    | Arg V H => CArg E V H
-    | Fun M => CFun M E
-    | If N z P => CIf E N z P
-    end
-  end.
-
-Definition normal_form_step M π :=
-  ~ exists M' π', M ⊣ π -k-> M' ⊣ π'.
