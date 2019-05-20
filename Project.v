@@ -72,9 +72,17 @@ Inductive multistep : term -> stack -> term -> stack -> Prop :=
 
 where "M ⊣ π -k->* M' ⊣ π'" := (multistep M π M' π') : machine_scope.
 
-End ΛHP_Machine.
+Lemma multistep_trans M1 π1 M2 π2 M3 π3 :
+  (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M2 ⊣ π2 -k->* M3 ⊣ π3) -> (M1 ⊣ π1 -k->* M3 ⊣ π3).
+Proof.
+  intros. induction H.
+  * assumption.
+  * apply (multistep_step M1 π1 M2 π2 M3 π3).
+    - assumption.
+    - apply IHmultistep. assumption.
+Qed.
 
-(** Question 2 *)
+End ΛHP_Machine.
 
 Import ΛHP.
 Import Terms Types Typing Smallstep.
@@ -88,11 +96,71 @@ Axiom weak_terminates :
   forall M, well_typed M ->
   exists W, M -w->* W /\ value_or_abs W.
 
+Remark step_stack_closure π :
+  forall M W, value_or_abs W ->
+  (M ⊣ [] -k->* W ⊣ []) -> (M ⊣ π -k->* W ⊣ π).
+Proof.
+Admitted.
+
+Lemma step_context_closure E :
+  forall M N,
+  (M ⊣ [] -k->* N ⊣ []) -> (E[M] ⊣ [] -k->* E[N] ⊣ []).
+Proof.
+  intros. induction H.
+  * apply multistep_refl.
+  * apply multistep_trans with (M2 := E[M2]) (π2 := π3).
+    - admit.
+    - assumption.
+Admitted.
+
+Lemma step_simulates_weak :
+  forall M N, M -w-> N -> M ⊣ [] -k->* N ⊣ [].
+Proof.
+  intros. induction H.
+  + apply multistep_step with (M2 := M!) (π2 := [Der]).
+    ** apply SDer.
+    ** apply multistep_step with (M2 := M) (π2 := []).
+        -- apply RDerBang.
+        -- apply multistep_refl.
+  + apply multistep_step with (M2 := n) (π2 := [Succ]).
+    ** apply SSucc.
+    ** apply multistep_step with (M2 := S n) (π2 := []).
+        -- apply RSucc.
+        -- apply multistep_refl.
+  + apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
+    ** apply SArg.
+    ** apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
+        -- apply SFun. assumption.
+        -- apply multistep_step with (M2 := M[V/x]) (π2 := []).
+          ++ apply RBeta. assumption.
+          ++ apply multistep_refl.
+  + admit.
+  + admit.
+  + apply RCtx with (E := E) in H. induction E; simpl in *.
+    ** apply IHweak; assumption.
+    ** inversion H.
+        -- apply multistep_step with (M2 := (der E[N])!) (π2 := [Der]).
+          ++ apply SDer.
+          ++ apply multistep_step with (M2 := der E[N]) (π2 := []).
+              *** apply RDerBang.
+              *** apply multistep_refl.
+        -- admit.
+    ** admit.
+    ** admit.
+    ** admit.
+    ** admit.
+Admitted.
+
 Lemma step_simulates_weak_bigstep :
   forall M W, value_or_abs W ->
   M -w->* W -> M ⊣ [] -k->* W ⊣ [].
 Proof.
-Admitted.
+  intros. induction H0 as [ M | M P W ].
+  * apply multistep_refl.
+  * apply multistep_trans with (M2 := P) (π2 := []).
+    - apply step_simulates_weak. assumption.
+    - apply IHmulti. assumption.
+Qed.
 
 Definition normal_form_step M π :=
   ~ exists M' π', M ⊣ π -k-> M' ⊣ π'.
@@ -101,38 +169,21 @@ Lemma value_or_abs_normal_form_step :
   forall W, value_or_abs W ->
   normal_form_step W ([]).
 Proof.
-Admitted.
+  intros. intro. destruct H0 as (M' & π' & H0). destruct H.
+  * destruct H; inversion H0.
+  * inversion H0.
+Qed.
 
 Theorem step_terminates :
   forall M, well_typed M ->
   exists W, (M ⊣ [] -k->* W ⊣ []) /\ normal_form_step W ([]).
 Proof.
-Admitted.
-
-forall M V, value V -> M -w->* V -> M ⊣ [] -k->* V ⊣ []
-
-(** Question 3 *)
-
-Inductive value_or_abs : term -> Prop :=
-| value_or_abs_value V : value V -> value_or_abs V
-| value_or_abs_abs x φ M : value_or_abs (λ x:φ, M).
-
-Open Scope machine_scope.
-
-Lemma step_context_closure π :
-  forall M W, value_or_abs W ->
-  (M ⊣ [] -k->* W ⊣ []) -> (M ⊣ π -k->* W ⊣ π).
-Proof.
-Admitted.
-
-Lemma step_simulates_weak :
-  forall M W, value_or_abs W ->
-  M -w->* W -> M ⊣ [] -k->* W ⊣ [].
-Proof.
-  intros. induction H0.
-  * apply multistep_refl.
-  * admit.
-Admitted.
+  intros.
+  pose proof weak_terminates M H. destruct H0 as (W & ? & ?).
+  pose proof step_simulates_weak_bigstep M W H1 H0. exists W. split.
+  * assumption.
+  * apply value_or_abs_normal_form_step. assumption.
+Qed.
 
 (* Things that might be useful at some point *)
 
@@ -152,13 +203,3 @@ Fixpoint context_of_stack (π : stack) : context :=
 
 Definition normal_form_step M π :=
   ~ exists M' π', M ⊣ π -k-> M' ⊣ π'.
-
-Lemma multistep_trans M1 π1 M2 π2 M3 π3 :
-  (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M2 ⊣ π2 -k->* M3 ⊣ π3) -> (M1 ⊣ π1 -k->* M3 ⊣ π3).
-Proof.
-  intros. induction H.
-  * assumption.
-  * apply (multistep_step M1 π1 M2 π2 M3 π3).
-    - assumption.
-    - apply IHmultistep. assumption.
-Qed.
