@@ -3,12 +3,10 @@ Open Scope list_scope.
 
 Axiom TODO : forall A, A.
 
-(** Question 1 *)
-
 Module ΛHP_Machine.
 
 Import ΛHP.
-Import Types Terms.
+Import Terms Types Typing Smallstep.
 
 Inductive marker :=
 | Der
@@ -17,9 +15,13 @@ Inductive marker :=
 | Fun (M : term)
 | If (N : term) (z : var) (P : term).
 
+Hint Constructors marker.
+
 Definition stack := list marker.
 
 Reserved Notation "M ⊣ π -k-> M' ⊣ π'" (at level 100, M' at level 99).
+
+(** Question 1 *)
 
 Inductive step : term -> stack -> term -> stack -> Prop :=
 
@@ -59,6 +61,8 @@ Inductive step : term -> stack -> term -> stack -> Prop :=
 
 where "M ⊣ π -k-> M' ⊣ π'" := (step M π M' π') : machine_scope.
 
+Hint Constructors step.
+
 Open Scope machine_scope.
 
 Reserved Notation "M ⊣ π -k->* M' ⊣ π'" (at level 100, M' at level 99).
@@ -73,6 +77,8 @@ Inductive multistep : term -> stack -> term -> stack -> Prop :=
 
 where "M ⊣ π -k->* M' ⊣ π'" := (multistep M π M' π') : machine_scope.
 
+Hint Constructors multistep.
+
 Lemma multistep_trans M1 π1 M2 π2 M3 π3 :
   (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M2 ⊣ π2 -k->* M3 ⊣ π3) -> (M1 ⊣ π1 -k->* M3 ⊣ π3).
 Proof.
@@ -83,15 +89,16 @@ Proof.
     - apply IHmultistep. assumption.
 Qed.
 
-End ΛHP_Machine.
-
-Import ΛHP.
-Import Terms Types Typing Smallstep.
-Import ΛHP_Machine.
+(** Question 2/3 *)
 
 Inductive value_or_abs : term -> Prop :=
 | value_or_abs_value V : value V -> value_or_abs V
 | value_or_abs_abs x φ M : value_or_abs (λ x:φ, M).
+
+Hint Constructors value_or_abs.
+
+(** To prove that the machine terminates, we assume that weak reduction terminates,
+    and then show that the machine simulates weak reduction (in bigstep semantics) *)
 
 Axiom weak_terminates :
   forall M, well_typed M ->
@@ -101,6 +108,9 @@ Remark step_stack_closure π :
   forall M1 π1 M2 π2,
   (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M1 ⊣ π1 ++ π -k->* M2 ⊣ π2 ++ π).
 Proof.
+  induction π.
+  * intros. rewrite 2 app_nil_r. assumption.
+  * intros. admit.
 Admitted.
 
 Fixpoint stack_of_context E :=
@@ -116,34 +126,7 @@ Fixpoint stack_of_context E :=
 Lemma step_simulates_weak_comp :
   forall M N, M --> N -> M ⊣ [] -k->* N ⊣ [].
 Proof.
-  intros. induction H.
-  * apply multistep_step with (M2 := M!) (π2 := [Der]).
-    - apply SDer.
-    - apply multistep_step with (M2 := M) (π2 := []).
-      + apply RDerBang.
-      + apply multistep_refl.
-  * apply multistep_step with (M2 := n) (π2 := [Succ]).
-    - apply SSucc.
-    - apply multistep_step with (M2 := S n) (π2 := []).
-      + apply RSucc.
-      + apply multistep_refl.
-  * apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
-    - apply SArg.
-    - apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
-      + apply SFun. assumption.
-      + apply multistep_step with (M2 := M[V/x]) (π2 := []).
-        ** apply RBeta. assumption.
-        ** apply multistep_refl.
-  * apply multistep_step with (M2 := 0) (π2 := [If N z P]).
-    - apply SIf.
-    - apply multistep_step with (M2 := N) (π2 := []).
-      + apply RIf_0.
-      + apply multistep_refl.
-  * apply multistep_step with (M2 := S n) (π2 := [If N z P]).
-    - apply SIf.
-    - apply multistep_step with (M2 := P[n/z]) (π2 := []).
-      + apply RIf_succ.
-      + apply multistep_refl.
+  destruct 1; econstructor; eauto.
 Qed.
 
 Lemma step_simulates_weak_ctx E :
@@ -152,23 +135,20 @@ Lemma step_simulates_weak_ctx E :
 Proof.
   intros. induction E; simpl in *.
   * apply step_simulates_weak_comp. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [Der]).
-    - apply SDer.
-    - rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [Succ]).
-    - apply SSucc.
-    - rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := V) (π2 := [Fun E[M]]).
-    - apply SArg.
-    - apply multistep_step with (M2 := E[M]) (π2 := [Arg V]).
-      + apply SFun. assumption.
-      + rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [Fun M0]).
-      + apply SArg.
-      + rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [If N0 z P]).
-      + apply SIf.
-      + rewrite <- app_nil_l with (l := [If N0 z P]). apply step_stack_closure. assumption.
+  * econstructor; eauto.
+    rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
+  * econstructor; eauto.
+    rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
+  * repeat (econstructor; eauto).
+    rewrite <- app_nil_l with (l := [Arg V]). unfold π. apply step_stack_closure. assumption.
+  * econstructor; eauto.
+    rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
+  * econstructor; eauto.
+    rewrite <- app_nil_l with (l := [If N0 z P]). apply step_stack_closure. assumption.
+Restart.
+  intros. induction E; simpl in *.
+  * apply step_simulates_weak_comp. assumption.
+  * econstructor; eauto. apply step_stack_closure. assumption.
 Qed.
 
 Lemma step_context_to_stack E :
@@ -237,7 +217,7 @@ Qed.
 
 Theorem step_terminates :
   forall M, well_typed M ->
-  exists W, (M ⊣ [] -k->* W ⊣ []) /\ normal_form_step W ([]).
+  exists N, (M ⊣ [] -k->* N ⊣ []) /\ normal_form_step N ([]).
 Proof.
   intros.
   pose proof weak_terminates M H. destruct H0 as (W & ? & ?).

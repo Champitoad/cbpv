@@ -10,6 +10,8 @@ Inductive multi {X} (R : relation X) : relation X :=
 | multi_step x y z :
   R x y -> multi R y z -> multi R x z.
 
+Hint Constructors multi.
+
 Definition normal_form {X} (R : relation X) (x : X) : Prop :=
   ~ exists y, R x y.
 
@@ -27,6 +29,8 @@ Inductive positive :=
 with general :=
 | TPos (φ : positive)
 | TArrow (φ : positive) (σ : general).
+
+Hint Constructors positive general.
 
 Coercion TPos : positive >-> general.
 
@@ -56,6 +60,8 @@ Inductive term :=
 | App (M N : term)
 | If (M N : term) (z : var) (P : term).
 
+Hint Constructors term.
+
 Coercion Var : var >-> term.
 Coercion Nat : nat >-> term.
 
@@ -76,6 +82,8 @@ Inductive value : term -> Prop :=
 | value_nat n : value (Nat n)
 | value_bang M : value (M!).
 
+Hint Constructors value.
+
 Reserved Notation "M [ N / x ]" (at level 9, N at level 8).
 
 Fixpoint subst (M N : term) (x : var) : term :=
@@ -91,17 +99,6 @@ Fixpoint subst (M N : term) (x : var) : term :=
   end
 where "M [ N / x ]" := (subst M N x) : terms_scope.
 
-Fixpoint free_occs (x : var) (M : term) : nat :=
-  match M with
-  | Var y => if x =? y then 1 else 0
-  | Nat _ => 0
-  | M! | der M | succ M => free_occs x M
-  | λ y:_, M => if x =? y then 0 else free_occs x M
-  | <M>N => free_occs x M + free_occs x N
-  | #if (M, N, [z] P) =>
-    free_occs x M + free_occs x N + if x =? z then 0 else free_occs x P
-  end.
-
 End Terms.
 
 Module Typing.
@@ -110,6 +107,8 @@ Import Types Terms.
 
 Inductive positive_assertion :=
 | Pos : var -> positive -> positive_assertion.
+
+Hint Constructors positive_assertion.
 
 Bind Scope typing_scope with positive_assertion.
 
@@ -161,6 +160,8 @@ Inductive valid_judgment : context -> term -> general -> Prop :=
 
 where "Γ ⊢ M : σ" := (valid_judgment Γ M σ) : typing_scope.
 
+Hint Constructors valid_judgment.
+
 Example Valid_Var_Instance : ["x" : ι] ⊢ "x" : ι.
 Proof.
   apply RVar. intuition.
@@ -182,6 +183,8 @@ Inductive context :=
 | CArg (E : context) (V : term) (H : value V)
 | CFun (M : term) (E : context)
 | CIf (E : context) (N : term) (z : var) (P : term).
+
+Hint Constructors context.
 
 Reserved Notation "E [ M ]" (at level 9, M at level 8).
 
@@ -220,6 +223,8 @@ Inductive weak_comp : term -> term -> Prop :=
 
 where "M --> N" := (weak_comp M N) : smallstep_scope.
 
+Hint Constructors weak_comp.
+
 Inductive weak : term -> term -> Prop :=
 
 | RCtx E M N :
@@ -227,6 +232,8 @@ Inductive weak : term -> term -> Prop :=
   E[M] -w-> E[N]
 
 where "M -w-> N" := (weak M N) : smallstep_scope.
+
+Hint Constructors weak.
 
 Notation "M '-w->*' N" := (multi weak M N) (at level 60) : smallstep_scope.
 
