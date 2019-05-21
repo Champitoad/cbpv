@@ -104,6 +104,14 @@ Axiom weak_terminates :
   forall M, well_typed M ->
   exists W, M -w->* W /\ value_or_abs W.
 
+Lemma app_cons_app {A} (l1 l2 : list A) (a : A) :
+  l1 ++ a :: l2 = (l1 ++ [a]) ++ l2.
+Proof.
+  induction l1, l2; firstorder.
+(*   apply app_comm_cons.
+ *)
+Admitted.
+
 Remark step_stack_closure π :
   forall M1 π1 M2 π2,
   (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M1 ⊣ π1 ++ π -k->* M2 ⊣ π2 ++ π).
@@ -134,21 +142,17 @@ Lemma step_simulates_weak_ctx E :
   forall M N, M --> N -> E[M] ⊣ [] -k->* N ⊣ π.
 Proof.
   intros. induction E; simpl in *.
-  * apply step_simulates_weak_comp. assumption.
-  * econstructor; eauto.
+  * destruct H; econstructor; eauto.
+  * econstructor. eauto.
     rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
-  * econstructor; eauto.
+  * econstructor. eauto.
     rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
-  * repeat (econstructor; eauto).
-    rewrite <- app_nil_l with (l := [Arg V]). unfold π. apply step_stack_closure. assumption.
-  * econstructor; eauto.
+  * econstructor. eauto. econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
     rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
-  * econstructor; eauto.
+  * econstructor. eauto.
     rewrite <- app_nil_l with (l := [If N0 z P]). apply step_stack_closure. assumption.
-Restart.
-  intros. induction E; simpl in *.
-  * apply step_simulates_weak_comp. assumption.
-  * econstructor; eauto. apply step_stack_closure. assumption.
 Qed.
 
 Lemma step_context_to_stack E :
@@ -157,23 +161,16 @@ Lemma step_context_to_stack E :
 Proof.
   intros. induction E; simpl in *.
   * apply multistep_refl.
-  * apply multistep_step with (M2 := E[M]) (π2 := [Der]).
-    - apply SDer.
-    - rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [Succ]).
-    - apply SSucc.
-    - rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := V) (π2 := [Fun E[M]]).
-    - apply SArg.
-    - apply multistep_step with (M2 := E[M]) (π2 := [Arg V]).
-      + apply SFun. assumption.
-      + rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [Fun M0]).
-      + apply SArg.
-      + rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
-  * apply multistep_step with (M2 := E[M]) (π2 := [If N z P]).
-      + apply SIf.
-      + rewrite <- app_nil_l with (l := [If N z P]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
+  * econstructor. eauto. econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [If N z P]). apply step_stack_closure. assumption.
 Qed.
 
 Definition normal_form_step M π :=
