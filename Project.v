@@ -1,13 +1,12 @@
-Require Import Defs Recdef Arith Lia.
+Require Import Defs.
+Open Scope list_scope.
 
 Axiom TODO : forall A, A.
-
-(** Question 1 *)
 
 Module ΛHP_Machine.
 
 Import ΛHP.
-Import Types Terms.
+Import Terms Types Typing Smallstep.
 
 Inductive marker :=
 | Der
@@ -16,9 +15,13 @@ Inductive marker :=
 | Fun (M : term)
 | If (N : term) (z : var) (P : term).
 
+Hint Constructors marker.
+
 Definition stack := list marker.
 
 Reserved Notation "M ⊣ π -k-> M' ⊣ π'" (at level 100, M' at level 99).
+
+(** Question 1 *)
 
 Inductive step : term -> stack -> term -> stack -> Prop :=
 
@@ -58,6 +61,8 @@ Inductive step : term -> stack -> term -> stack -> Prop :=
 
 where "M ⊣ π -k-> M' ⊣ π'" := (step M π M' π') : machine_scope.
 
+Hint Constructors step.
+
 Open Scope machine_scope.
 
 Reserved Notation "M ⊣ π -k->* M' ⊣ π'" (at level 100, M' at level 99).
@@ -72,6 +77,8 @@ Inductive multistep : term -> stack -> term -> stack -> Prop :=
 
 where "M ⊣ π -k->* M' ⊣ π'" := (multistep M π M' π') : machine_scope.
 
+Hint Constructors multistep.
+
 Lemma multistep_trans M1 π1 M2 π2 M3 π3 :
   (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M2 ⊣ π2 -k->* M3 ⊣ π3) -> (M1 ⊣ π1 -k->* M3 ⊣ π3).
 Proof.
@@ -82,95 +89,89 @@ Proof.
     - apply IHmultistep. assumption.
 Qed.
 
-End ΛHP_Machine.
-
-Import ΛHP.
-Import Terms Types Typing Smallstep.
-Import ΛHP_Machine.
+(** Question 2/3 *)
 
 Inductive value_or_abs : term -> Prop :=
 | value_or_abs_value V : value V -> value_or_abs V
 | value_or_abs_abs x φ M : value_or_abs (λ x:φ, M).
 
+Hint Constructors value_or_abs.
+
+(** To prove that the machine terminates, we assume that weak reduction terminates,
+    and then show that the machine simulates weak reduction (in bigstep semantics) *)
+
 Axiom weak_terminates :
   forall M, well_typed M ->
   exists W, M -w->* W /\ value_or_abs W.
 
+Lemma app_cons_app {A} :
+  forall (l1 l2 : list A) (a : A),
+  l1 ++ a :: l2 = (l1 ++ [a]) ++ l2.
+Proof.
+  induction l1, l2; firstorder.
+  rewrite <- app_comm_cons. rewrite IHl1.
+  rewrite app_comm_cons. reflexivity.
+Qed.
+
 Remark step_stack_closure π :
-  forall M W, value_or_abs W ->
-  (M ⊣ [] -k->* W ⊣ []) -> (M ⊣ π -k->* W ⊣ π).
+  forall M1 π1 M2 π2,
+  (M1 ⊣ π1 -k->* M2 ⊣ π2) -> (M1 ⊣ π1 ++ π -k->* M2 ⊣ π2 ++ π).
 Proof.
-Admitted.
+  induction π.
+  * intros. rewrite 2 app_nil_r. assumption.
+  * intros.
+    rewrite app_cons_app with (l1 := π1).
+    rewrite app_cons_app with (l1 := π2).
+    apply IHπ. induction H.
+    - apply multistep_refl.
+    - induction a; econstructor; eauto;
+      destruct H; econstructor; eauto.
+Qed.
 
-Lemma step_context_closure E :
-  forall M N,
-  (M ⊣ [] -k->* N ⊣ []) -> (E[M] ⊣ [] -k->* E[N] ⊣ []).
-Proof.
-  intros. induction H.
-  * apply multistep_refl.
-  * apply multistep_trans with (M2 := E[M2]) (π2 := π3).
-    - admit.
-    - assumption.
-Admitted.
-
-Fixpoint stack_of_context (E : context) : stack :=
+Fixpoint stack_of_context E :=
   match E with
   | CHole => []
-  | CDer E => Der :: stack_of_context E
-  | CSucc E => Succ :: stack_of_context E
-  | CArg E V => Arg V :: stack_of_context E
-  | CFun M E => Arg M :: stack_of_context E
-  | CIf E N z P => If N z P :: stack_of_context E
+  | CDer E => stack_of_context E ++ [Der]
+  | CSucc E => stack_of_context E ++ [Succ]
+  | CArg E V _ => stack_of_context E ++ [Arg V]
+  | CFun M E => stack_of_context E ++ [Fun M]
+  | CIf E N z P => stack_of_context E ++ [If N z P]
   end.
 
-Lemma step_simulates_weak :
-  forall M N, M -w-> N -> exists π, M ⊣ [] -k->* N ⊣ π.
+Lemma step_simulates_weak_comp E :
+  let π := stack_of_context E in
+  forall M N, M --> N -> E[M] ⊣ [] -k->* N ⊣ π.
 Proof.
-  intros. induction H.
-  + exists []. apply multistep_step with (M2 := M!) (π2 := [Der]).
-    ** apply SDer.
-    ** apply multistep_step with (M2 := M) (π2 := []).
-        -- apply RDerBang.
-        -- apply multistep_refl.
-  + exists []. apply multistep_step with (M2 := n) (π2 := [Succ]).
-    ** apply SSucc.
-    ** apply multistep_step with (M2 := S n) (π2 := []).
-        -- apply RSucc.
-        -- apply multistep_refl.
-  + exists []. apply multistep_step with (M2 := V) (π2 := [Fun (λ x:φ, M)]).
-    ** apply SArg.
-    ** apply multistep_step with (M2 := λ x:φ, M) (π2 := [Arg V]).
-        -- apply SFun. assumption.
-        -- apply multistep_step with (M2 := M[V/x]) (π2 := []).
-          ++ apply RBeta. assumption.
-          ++ apply multistep_refl.
-  + exists []. admit.
-  + exists []. admit.
-  + destruct IHweak as (π & IHweak). set (πE := stack_of_context E).
-    induction E; simpl in *.
-    ** exists π. assumption.
-    ** exists (E[M]), [Der]. apply RCtx with (E := E) in H.  inversion H.
-        -- apply multistep_step with (M2 := (der E[N])!) (π2 := [Der]).
-          ++ apply SDer.
-          ++ apply multistep_step with (M2 := der E[N]) (π2 := []).
-              *** apply RDerBang.
-              *** apply multistep_refl.
-        -- admit.
-    ** admit.
-    ** admit.
-    ** admit.
-    ** admit.
-Admitted.
+  intros. induction E; simpl in *.
+  * destruct H; econstructor; eauto.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
+  * econstructor. eauto. econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [If N0 z P]). apply step_stack_closure. assumption.
+Qed.
 
-Lemma step_simulates_weak_bigstep :
-  forall M W, value_or_abs W ->
-  M -w->* W -> M ⊣ [] -k->* W ⊣ [].
+Lemma step_context_to_stack E :
+  let π := stack_of_context E in
+  forall M, E[M] ⊣ [] -k->* M ⊣ π.
 Proof.
-  intros. induction H0 as [ M | M P W ].
+  intros. induction E; simpl in *.
   * apply multistep_refl.
-  * apply multistep_trans with (M2 := P) (π2 := []).
-    - apply step_simulates_weak. assumption.
-    - apply IHmulti. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Der]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Succ]). apply step_stack_closure. assumption.
+  * econstructor. eauto. econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Arg V]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [Fun M0]). apply step_stack_closure. assumption.
+  * econstructor. eauto.
+    rewrite <- app_nil_l with (l := [If N z P]). apply step_stack_closure. assumption.
 Qed.
 
 Definition normal_form_step M π :=
@@ -185,9 +186,36 @@ Proof.
   * inversion H0.
 Qed.
 
+Lemma multistep_deterministic : TODO _.
+Proof.
+Admitted.
+
+Lemma one_way_to_normal_form :
+  forall M1 π1 M2 π2 M3 π3,
+  (M1 ⊣ π1 -k->* M3 ⊣ π3) -> (normal_form_step M3 π3) ->
+  (M1 ⊣ π1 -k->* M2 ⊣ π2) ->
+  (M2 ⊣ π2 -k->* M3 ⊣ π3).
+Proof.
+  (* The proof will use multistep_deterministic *)
+Admitted.
+
+Theorem step_simulates_weak_bigstep :
+  forall M W, value_or_abs W ->
+  M -w->* W -> M ⊣ [] -k->* W ⊣ [].
+Proof.
+  intros. induction H0 as [ M | M N W ].
+  * apply multistep_refl.
+  * destruct H0.
+    pose proof (step_simulates_weak_comp E M N H0).
+    pose proof (step_context_to_stack E N).
+    pose proof (value_or_abs_normal_form_step W H). apply IHmulti in H.
+    pose proof (one_way_to_normal_form E[N] ([]) N (stack_of_context E) W ([]) H H4 H3).
+    apply multistep_trans with (M2 := N) (π2 := stack_of_context E); assumption.
+Qed.
+
 Theorem step_terminates :
   forall M, well_typed M ->
-  exists W, (M ⊣ [] -k->* W ⊣ []) /\ normal_form_step W ([]).
+  exists N, (M ⊣ [] -k->* N ⊣ []) /\ normal_form_step N ([]).
 Proof.
   intros.
   pose proof weak_terminates M H. destruct H0 as (W & ? & ?).
@@ -196,18 +224,111 @@ Proof.
   * apply value_or_abs_normal_form_step. assumption.
 Qed.
 
-(* Things that might be useful at some point *)
+(** Question 5 *)
 
-Fixpoint context_of_stack (π : stack) : context :=
-  match π with
-  | [] => CHole
-  | m :: π =>
-    let E := context_of_stack π in
-    match m with
-    | Der => CDer E
-    | Succ => CSucc E
-    | Arg V => CArg E V
-    | Fun M => CFun M E
-    | If N z P => CIf E N z P
-    end
+Inductive status := Running | Done.
+Inductive state :=
+| State (M : term) (π : stack) (status : status).
+
+Delimit Scope eval_scope with eval.
+Bind Scope eval_scope with state.
+
+Notation "M -| π" := (State M π Running) (at level 80) : machine_scope.
+
+Definition fstep (s : state) : state :=
+  match s with
+  (* Stack update rules *)
+  | (der M -| π) => M -| Der :: π
+  | (succ M -| π) => M -| Succ :: π
+  | (<M>N -| π) => N -| Fun M :: π
+  | (Var _ as V -| Fun M :: π)
+  | (Nat _ as V -| Fun M :: π)
+  | (_!    as V -| Fun M :: π) => M -| Arg V :: π
+  | (#if (M, N, [z] P) -| π) => M -| If N z P :: π
+  (* Reduction rules *)
+  | (M! -| Der :: π) => M -| π
+  | (Nat n -| Succ :: π) => Nat (S n) -| π
+  | (λ x:φ, M -| Arg V :: π) => M[V/x] -| π
+  | (Nat 0 -| If N z P :: π) => N -| π
+  | (Nat (S n) -| If N z P :: π) => P[(Nat n)/z] -| π
+  (* Status management *)
+  | State M π _ => State M π Done
   end.
+
+Fixpoint run (fuel : nat) (s : state) { struct fuel } : state :=
+  let s := fstep s in
+  let (M, π, status) := s in
+  match fuel, status with
+  | S n, Running => run n (M -| π)
+  | _, _ => s
+  end.
+
+Fixpoint unstack M π :=
+  match π with
+  | [] => (M -| π)
+  | m :: π =>
+    let M := match m with
+    | Der => der M
+    | Succ => succ M
+    | Fun N => <N>M
+    | Arg V => <M>V
+    | If N z P => #if (M, N, [z] P)
+    end
+    in unstack M π
+  end.
+
+Definition eval (fuel : nat) (s : state) : term :=
+  let (V, π, _) := run fuel s in
+  match π with
+  | [] => V
+  | _ => let (V', _, _) := unstack V π in V'
+  end.
+
+Theorem eval_invariant_by_step :
+  forall M π M' π', (M ⊣ π -k-> M' ⊣ π') ->
+  exists n, eval n (M -| π) = eval n (M' -| π').
+Proof.
+  intros.
+Admitted.
+
+Theorem eval_simulates_step :
+  forall M π V, value V -> (M ⊣ π -k->* V ⊣ []) ->
+  exists n, eval n (M -| π) = V.
+Proof.
+  intros.
+Admitted.
+
+(** Question 4 *)
+
+Inductive valid_stack_judgment : general -> stack -> general -> Prop :=
+
+| Todo σ π τ : σ ⊢ π : τ
+
+where "σ ⊢ π : τ" := (valid_stack_judgment σ π τ) : machine_scope.
+
+Hint Constructors valid_stack_judgment.
+
+Reserved Notation "⊢ ( M , π ) : σ" (at level 100, π at level 90, σ at level 90).
+
+Inductive valid_state_judgment : term -> stack -> general -> Prop :=
+
+| StateJudgment M π σ τ :
+  ([] ⊢ M : σ)%typing -> σ ⊢ π : τ ->
+  ⊢ (M, π) : τ
+
+where "⊢ ( M , π ) : σ" := (valid_state_judgment M π σ) : machine_scope.
+
+Theorem step_subject_reduction σ :
+  forall M π M' π',
+  ⊢ (M, π) : σ -> (M ⊣ π -k-> M' ⊣ π') ->
+  ⊢ (M', π') : σ.
+Proof.
+Admitted.
+
+Theorem eval_subject_reduction σ :
+  forall M π, ⊢ (M, π) : σ ->
+  exists n, ([] ⊢ eval n (M -| π) : σ)%typing.
+Proof.
+Admitted.
+
+(** Question 6 *)
