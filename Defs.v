@@ -1,6 +1,6 @@
 Require Export String List.
 Export ListNotations.
-Local Open Scope string_scope.
+Open Scope string_scope.
 
 Definition relation (X : Type) := X -> X -> Prop.
 
@@ -119,8 +119,7 @@ Open Scope typing_scope.
 
 Definition context := list positive_assertion.
 
-Definition Wf_context : context -> Prop :=
-  fun Γ =>
+Definition Wf_context (Γ : context) : Prop :=
   forall a a', List.In a Γ -> List.In a' Γ -> a <> a' ->
   let (x, _) := a in let (x', _) := a' in x <> x'.
 
@@ -128,34 +127,34 @@ Reserved Notation "Γ ⊢ M : σ" (at level 10, M at level 20, σ at level 20).
 
 Inductive valid_judgment : context -> term -> general -> Prop :=
 
-| RVar Γ x σ :
+| T_Var Γ x σ : Wf_context Γ ->
   match σ with TPos φ => In (x : φ) Γ | _ => False end ->
   Γ ⊢ Var x : σ
 
-| RNat Γ n :
+| T_Nat Γ n : Wf_context Γ ->
   Γ ⊢ Nat n : ι
 
-| RBang Γ M σ :
+| T_Bang Γ M σ :
   Γ ⊢ M : σ ->
   Γ ⊢ M! : !σ
 
-| RDer Γ M σ :
+| T_Der Γ M σ :
   Γ ⊢ M : !σ ->
   Γ ⊢ der M : σ
 
-| RSucc Γ M :
+| T_Succ Γ M :
   Γ ⊢ M : ι ->
   Γ ⊢ succ M : ι
 
-| RAbs Γ x M φ σ :
+| T_Abs Γ x M φ σ :
   ((x : φ) :: Γ) ⊢ M : σ ->
   Γ ⊢ (λ x:φ, M) : φ -o σ
 
-| RApp Γ M N φ σ :
+| T_App Γ M N φ σ :
   Γ ⊢ M : φ -o σ -> Γ ⊢ N : φ ->
   Γ ⊢ (<M>N) : σ
 
-| RIf Γ z M N P σ :
+| T_If Γ z M N P σ :
   Γ ⊢ M : ι -> Γ ⊢ N : σ -> ((z : ι) :: Γ) ⊢ P : σ ->
   Γ ⊢ (#if (M, N, [z] P)) : σ
 
@@ -165,7 +164,9 @@ Hint Constructors valid_judgment.
 
 Example Valid_Var_Instance : ["x" : ι] ⊢ "x" : ι.
 Proof.
-  apply RVar. intuition.
+  apply T_Var.
+  * unfold Wf_context. firstorder. congruence.
+  * intuition.
 Qed.
 
 Definition well_typed (M : term) :=
