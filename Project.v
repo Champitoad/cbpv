@@ -687,19 +687,26 @@ End Smallstep.
 Import ΛHP.Types ΛHP.Terms ΛHP.Typing ΛHP.Smallstep.
 Import Types Terms Typing Smallstep.
 
-Check (<0>"x").
+Fixpoint compile_type (A : Λn.Types.type) : ΛHP.Types.general :=
+  match A with
+  | ι => ι
+  | A ~> B => (!(compile_type A)) -o (compile_type B)
+  end.
 
 Fixpoint compile_term (M : Λn.Terms.term) : ΛHP.Terms.term :=
   match M with
-  | Var x => (Var x)%terms
-  | _ => der 0
+  | Var x => der (ΛHP.Terms.Var x)
+  | Nat n => ΛHP.Terms.Nat n
+  | succ M => succ (compile_term M)
+  | λ x:A, M => λ x:(!(compile_type A)), compile_term M
+  | <M>N => <compile_term M>(compile_term N)!
   end.
 
-Fixpoint compile_type (A : Λn.Types.type) : ΛHP.Types.general :=
-  TODO _.
-
 Fixpoint compile_context (Γ : Λn.Typing.context) : ΛHP.Typing.context :=
-  TODO _.
+  match Γ with
+  | [] => []
+  | x : A :: Γ => (x : !(compile_type A) :: compile_context Γ)%typing
+  end.
 
 Theorem compile_preserves_typing : forall Γ M A,
   Γ ⊢ M : A -> (compile_context Γ ⊢ compile_term M : compile_type A)%typing.

@@ -1,4 +1,5 @@
 -I .
+-R . Top
 
 Defs.v
 Projet.v
