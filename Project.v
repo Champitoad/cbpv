@@ -437,37 +437,37 @@ Lemma subst_typing :
 Proof.
   induction M; intros; simpl; inversion H; try (econstructor; eauto).
   * destruct σ.
-    - case (x0 =? x) eqn:?.
-      + apply eqb_eq in Heqb. destruct H4.
+    - case (string_dec x0 x) eqn:?.
+      + destruct H4.
         ** congruence.
         ** admit. (* The proof would be by case on φ =? φ0,
                      but we don't have the decidable equality
                      on types yet... *)
-      + apply eqb_neq in Heqb. destruct H4.
+      + destruct H4.
         ** congruence.
         ** constructor; assumption.
     - contradiction.
-  * case (x0 =? x) eqn:?.
-    - apply eqb_eq in Heqb. admit.
+  * case (string_dec x0 x) eqn:?.
+    - admit.
       (* Again a proof by case on φ =? φ0 *)
     - assert (Wf_context (x : φ :: Γ)).
       { apply valid_judgment_Wf_context in H6.
         eapply Wf_context_subcontext; eauto.
         unfold "⊂". intros. destruct H7.
         left. assumption. right. right. assumption. }
-      apply eqb_neq in Heqb. eapply IHM; eauto.
+      eapply IHM; eauto.
       + apply exchange. eauto.
       + eapply weakening; eauto.
         unfold "⊂". intros. right. assumption.
-  * case (x =? z) eqn:?.
-    - apply eqb_eq in Heqb. admit.
+  * case (string_dec x z) eqn:?.
+    - admit.
       (* Again a proof by case on φ =? ι *)
     - assert (Wf_context (z : ι :: Γ)).
       { apply valid_judgment_Wf_context in H9.
         eapply Wf_context_subcontext; eauto.
         unfold "⊂". intros. destruct H10.
         left. assumption. right. right. assumption. }
-      apply eqb_neq in Heqb. eapply IHM3; eauto.
+      eapply IHM3; eauto.
       + apply exchange. eauto.
       + eapply weakening; eauto.
         unfold "⊂". intros. right. assumption.
@@ -507,6 +507,12 @@ End ΛHP_Machine.
 
 Module Λv.
 
+End Λv.
+
+(** Question 7 *)
+
+Module Λn.
+
 Module Types.
 
 Inductive type :=
@@ -515,16 +521,194 @@ Inductive type :=
 
 Hint Constructors type.
 
+Delimit Scope n_types_scope with n_types.
+Bind Scope n_types_scope with type.
+
+Notation "'ι'" := TNat : n_types_scope.
+Infix "~>" := TArrow (at level 20, right associativity) : n_types_scope.
+
+Open Scope n_types_scope.
+
 End Types.
 
 Module Terms.
 
+Import Types.
+
+Inductive term :=
+| Var (x : var)
+| Nat (n : nat)
+| Succ (M : term)
+| Abs (x : var) (A : type) (M : term)
+| App (M N : term).
+
+Hint Constructors term.
+
+Coercion Var : var >-> term.
+Coercion Nat : nat >-> term.
+
+Delimit Scope n_terms_scope with n_terms.
+Bind Scope n_terms_scope with term.
+
+Notation "'succ' M" := (Succ M) (at level 20) : n_terms_scope.
+Notation "'λ' x : A , M" := (Abs x A M) (at level 50, x at level 25) : n_terms_scope.
+Notation "< M > N" := (App M N) (at level 30, M at level 40) : n_terms_scope.
+
+Open Scope n_terms_scope.
+
+Inductive value : term -> Prop :=
+| value_var x : value (Var x)
+| value_nat n : value (Nat n).
+
+Hint Constructors value.
+
+Reserved Notation "M [ N / x ]" (at level 9, N at level 8).
+
+Fixpoint subst (M N : term) (x : var) : term :=
+  match M with
+  | Var y => if string_dec x y then N else M
+  | Nat _ => M
+  | succ M => succ M[N/x]
+  | λ y:A, M => λ y:A, if string_dec x y then M else M[N/x]
+  | <M>M' => <M[N/x]>M'[N/x]
+  end
+where "M [ N / x ]" := (subst M N x) : n_terms_scope.
+
 End Terms.
 
-End Λv.
+Module Typing.
 
-(** Question 7 *)
+Import Types Terms.
 
-Module Λn.
+Inductive assertion :=
+| Asst : var -> type -> assertion.
+
+Hint Constructors assertion.
+
+Delimit Scope n_typing_scope with n_typing.
+Bind Scope n_typing_scope with assertion.
+
+Notation "x : A" := (Asst x A) (at level 30) : n_typing_scope.
+
+Open Scope n_typing_scope.
+
+Definition context := list assertion.
+
+Definition Wf_context (Γ : context) : Prop :=
+  forall a a', List.In a Γ -> List.In a' Γ -> a <> a' ->
+  let (x, _) := a in let (x', _) := a' in x <> x'.
+
+Reserved Notation "Γ ⊢ M : A" (at level 10, M at level 20, A at level 20).
+
+Inductive valid_judgment : context -> term -> type -> Prop :=
+
+| T_Var Γ x A : Wf_context Γ ->
+  In (x : A) Γ ->
+  Γ ⊢ Var x : A
+
+| T_Nat Γ n : Wf_context Γ ->
+  Γ ⊢ Nat n : ι
+
+| T_Succ Γ M :
+  Γ ⊢ M : ι ->
+  Γ ⊢ succ M : ι
+
+| T_Abs Γ x M A B :
+  (x : A :: Γ) ⊢ M : B ->
+  Γ ⊢ (λ x:A, M) : A ~> B
+
+| T_App Γ M N A B :
+  Γ ⊢ M : A ~> B -> Γ ⊢ N : A ->
+  Γ ⊢ (<M>N) : B
+
+where "Γ ⊢ M : A" := (valid_judgment Γ M A) : n_typing_scope.
+
+Hint Constructors valid_judgment.
+
+Definition well_typed (M : term) :=
+  exists A, [] ⊢ M : A.
+
+End Typing.
+
+Module Smallstep.
+
+Import Types Terms.
+
+Inductive context :=
+| CHole
+| CSucc (E : context)
+| CArg (E : context) (V : term) (H : value V)
+| CFun (M : term) (E : context).
+
+Hint Constructors context.
+
+Reserved Notation "E [ M ]" (at level 9, M at level 8).
+
+Fixpoint fill_context E M :=
+  match E with
+  | CHole => M
+  | CSucc E => succ E[M]
+  | CArg E V _ => <E[M]>V
+  | CFun N E => <N>E[M]
+  end
+where "E [ M ]" := (fill_context E M) : n_smallstep_scope.
+
+Open Scope n_smallstep_scope.
+
+Reserved Notation "M --> N" (at level 60).
+Reserved Notation "M -n-> N" (at level 60).
+
+Inductive cbn_comp : term -> term -> Prop :=
+
+| RSucc (n : nat) :
+  succ n --> S n
+
+| RBeta x A M V : value V ->
+  <(λ x:A, M)> V --> M[V/x]
+
+where "M --> N" := (cbn_comp M N) : n_smallstep_scope.
+
+Hint Constructors cbn_comp.
+
+Inductive cbn : term -> term -> Prop :=
+
+| RCtx E M N :
+  M --> N ->
+  E[M] -n-> E[N]
+
+where "M -n-> N" := (cbn M N) : n_smallstep_scope.
+
+Hint Constructors cbn.
+
+Notation "M '-n->*' N" := (multi cbn M N) (at level 60) : n_smallstep_scope.
+
+End Smallstep.
+
+Import ΛHP.Types ΛHP.Terms ΛHP.Typing ΛHP.Smallstep.
+Import Types Terms Typing Smallstep.
+
+Check (<0>"x").
+
+Fixpoint compile_term (M : Λn.Terms.term) : ΛHP.Terms.term :=
+  match M with
+  | Var x => (Var x)%terms
+  | _ => der 0
+  end.
+
+Fixpoint compile_type (A : Λn.Types.type) : ΛHP.Types.general :=
+  TODO _.
+
+Fixpoint compile_context (Γ : Λn.Typing.context) : ΛHP.Typing.context :=
+  TODO _.
+
+Theorem compile_preserves_typing : forall Γ M A,
+  Γ ⊢ M : A -> (compile_context Γ ⊢ compile_term M : compile_type A)%typing.
+Proof.
+Admitted.
+
+Theorem weak_simulates_cbn : forall M N,
+  M -n-> N -> compile_term M -w->* compile_term N.
+Proof.
+Admitted.
 
 End Λn.

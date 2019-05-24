@@ -88,14 +88,14 @@ Reserved Notation "M [ N / x ]" (at level 9, N at level 8).
 
 Fixpoint subst (M N : term) (x : var) : term :=
   match M with
-  | Var y => if x =? y then N else M
+  | Var y => if string_dec x y then N else M
   | Nat _ => M
   | M! => M[N/x]!
   | der M => der M[N/x]
   | succ M => succ M[N/x]
-  | λ y:φ, M => λ y:φ, if x =? y then M else M[N/x]
+  | λ y:φ, M => λ y:φ, if string_dec x y then M else M[N/x]
   | <M>M' => <M[N/x]>M'[N/x]
-  | #if (M, N', [z] P) => #if (M[N/x], N'[N/x], [z] if x =? z then P else P[N/x])
+  | #if (M, N', [z] P) => #if (M[N/x], N'[N/x], [z] if string_dec x z then P else P[N/x])
   end
 where "M [ N / x ]" := (subst M N x) : terms_scope.
 
