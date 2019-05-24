@@ -637,8 +637,7 @@ Import Types Terms.
 Inductive context :=
 | CHole
 | CSucc (E : context)
-| CArg (E : context) (V : term) (H : value V)
-| CFun (M : term) (E : context).
+| CApp (E : context) (M : term).
 
 Hint Constructors context.
 
@@ -648,8 +647,7 @@ Fixpoint fill_context E M :=
   match E with
   | CHole => M
   | CSucc E => succ E[M]
-  | CArg E V _ => <E[M]>V
-  | CFun N E => <N>E[M]
+  | CApp E N => <E[M]>N
   end
 where "E [ M ]" := (fill_context E M) : n_smallstep_scope.
 
@@ -663,8 +661,8 @@ Inductive cbn_comp : term -> term -> Prop :=
 | RSucc (n : nat) :
   succ n --> S n
 
-| RBeta x A M V : value V ->
-  <(λ x:A, M)> V --> M[V/x]
+| RBeta x A M N :
+  <(λ x:A, M)> N --> M[N/x]
 
 where "M --> N" := (cbn_comp M N) : n_smallstep_scope.
 
@@ -708,9 +706,67 @@ Fixpoint compile_context (Γ : Λn.Typing.context) : ΛHP.Typing.context :=
   | x : A :: Γ => (x : !(compile_type A) :: compile_context Γ)%typing
   end.
 
+Open Scope n_typing_scope.
+
+Definition subcontext (Γ Γ' : Typing.context) :=
+  forall a, List.In a Γ -> List.In a Γ'.
+
+Notation "Γ ⊂ Γ'" := (subcontext Γ Γ') (at level 60) : typing_scope.
+
+Lemma Wf_context_subcontext Γ Γ' :
+  Γ' ⊂ Γ ->
+  Wf_context Γ -> Wf_context Γ'.
+Proof.
+  unfold Wf_context. intros. apply (H0 a a') in H; auto.
+Qed.
+
+Lemma compile_Wf_context : forall Γ,
+  Wf_context Γ -> ΛHP.Typing.Wf_context (compile_context Γ).
+Proof.
+  induction Γ.
+  * simpl. easy.
+  * simpl. intros. destruct a as (x & A).
+Admitted.
+
 Theorem compile_preserves_typing : forall Γ M A,
   Γ ⊢ M : A -> (compile_context Γ ⊢ compile_term M : compile_type A)%typing.
 Proof.
+  induction 1; simpl; econstructor; eauto.
+  * econstructor.
+    - apply compile_Wf_context. assumption.
+    - induction Γ.
+      + destruct H0.
+      + simpl. destruct a as (y & B). destruct H0.
+        ** inversion_clear H0. intuition.
+        ** right. apply IHΓ; auto.
+           eapply Wf_context_subcontext; eauto.
+           unfold "⊂". intros. right. assumption.
+  * apply compile_Wf_context. assumption.
+Qed.
+
+Lemma multi_weak_context_closure : forall E M N,
+  M -w->* N -> (E[M] -w->* E[N])%smallstep.
+Proof.
+Admitted.
+
+Lemma weak_simulates_cbn_subst : forall M N x,
+  ((compile_term M)[((compile_term N)!)/x])%terms -w->* compile_term (M[N/x]).
+Proof.
+  induction M; intros; simpl.
+  * case (string_dec x0 x) eqn:?.
+    - econstructor.
+      + apply (ΛHP.Smallstep.RCtx ΛHP.Smallstep.CHole
+              (der (compile_term N) !) (compile_term N)).
+        econstructor.
+      + econstructor.
+    - econstructor.
+  * econstructor.
+  * apply (multi_weak_context_closure (ΛHP.Smallstep.CSucc ΛHP.Smallstep.CHole)).
+    apply IHM.
+  * case (string_dec x0 x) eqn:?.
+    - econstructor.
+    - admit. (* Doesn't reduce under abstraction ! *)
+  * admit.
 Admitted.
 
 Theorem weak_simulates_cbn : forall M N,
